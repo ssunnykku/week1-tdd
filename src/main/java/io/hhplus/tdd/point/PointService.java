@@ -39,6 +39,12 @@ public class PointService {
         UserPoint currentPoint = userPointTable.selectById(userId);
         UserPoint chargedPoint = currentPoint.addPoint(amount);
 
+        long totalPoint = currentPoint.point() + chargedPoint.point();
+
+        if (totalPoint > 10000000) {
+            throw new InvalidRequestException(ErrorCode.EXCEED_AMOUNT);
+        }
+
         pointHistoryTable.insert(userId, amount, TransactionType.CHARGE, System.currentTimeMillis());
 
         return userPointTable.insertOrUpdate(userId, chargedPoint.point());
