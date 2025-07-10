@@ -2,6 +2,7 @@ package io.hhplus.tdd.point;
 
 import io.hhplus.tdd.database.PointHistoryTable;
 import io.hhplus.tdd.database.UserPointTable;
+import io.hhplus.tdd.exception.ErrorCode;
 import io.hhplus.tdd.exception.InvalidRequestException;
 import io.hhplus.tdd.point.domain.PointHistory;
 import io.hhplus.tdd.point.domain.TransactionType;
@@ -13,6 +14,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -69,9 +71,11 @@ public class PointUnitTest {
         long initialBalance = 5000L;
         long chargeAmount = 20000L;
 
-        long totalAmount = initialBalance + chargeAmount;
-
         UserPoint UserPointFromDb = new UserPoint(userId, initialBalance, System.currentTimeMillis());
+
+        long totalAmount = UserPointFromDb.point() + chargeAmount;
+
+
         UserPoint expectedChargedPoint = new UserPoint(userId, totalAmount, System.currentTimeMillis());
 
         when(mockUserPointTable.selectById(userId)).thenReturn(UserPointFromDb);
@@ -92,9 +96,8 @@ public class PointUnitTest {
     @Test
     void 천만원_초과_충전시_예외_발생() {
         // given
-        long initialBalance = 10000000L;
-        long chargeAmount = 10000L;
-        long totalAmount = initialBalance + chargeAmount;
+        long initialBalance = 9990000L;
+        long chargeAmount = 11000L;
 
         UserPoint UserPointFromDb = new UserPoint(userId, initialBalance, System.currentTimeMillis());
 
@@ -103,11 +106,40 @@ public class PointUnitTest {
         // then
         assertThatThrownBy(() -> pointService.charge(userId, chargeAmount))
                 .isInstanceOf(InvalidRequestException.class)
-                .hasMessageContaining("충전 가능 금액 1000만원을 초과했습니다.");
+                .hasMessageContaining(ErrorCode.EXCEED_AMOUNT.getMessage());
 
         verify(mockUserPointTable, times(1)).selectById(userId);
         verify(mockPointHistoryTable, never()).insert(anyLong(), anyLong(), any(TransactionType.class), anyLong());
         verify(mockUserPointTable, never()).insertOrUpdate(anyLong(), anyLong());
+    }
+
+    @Test
+    void 충전_금액_천원_단위_아닐때_예외_발생() {
+        //given
+        long chargeAmount = 99990L;
+
+        assertThatThrownBy(() -> pointService.charge(userId, chargeAmount))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining(ErrorCode.NOT_UNIT_OF_TEN_THOUSAND.getMessage());
+
+        verify(mockUserPointTable, never()).selectById(userId);
+        verify(mockUserPointTable, never()).insertOrUpdate(anyLong(), anyLong());
+        verify(mockPointHistoryTable, never()).insert(anyLong(), anyLong(), any(TransactionType.class), anyLong());
+    }
+
+    @Test
+    void 충전_금액_최소_만원_미만일때_예외_발생() {
+        //given
+        long chargeAmount = 9999L;
+
+        //then
+        assertThatThrownBy(() -> pointService.charge(userId, chargeAmount))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining(ErrorCode.CHARGE_AMOUNT_TOO_LOW.getMessage());
+
+        verify(mockUserPointTable, never()).selectById(userId);
+        verify(mockUserPointTable, never()).insertOrUpdate(anyLong(), anyLong());
+        verify(mockPointHistoryTable, never()).insert(anyLong(), anyLong(), any(TransactionType.class), anyLong());
     }
 
     // 포인트 사용
@@ -124,7 +156,7 @@ public class PointUnitTest {
         // when & then
         assertThatThrownBy(() -> pointService.use(userId, pointToUse))
                 .isInstanceOf(InvalidRequestException.class)
-                .hasMessageContaining("포인트가 부족합니다.");
+                .hasMessageContaining(ErrorCode.INSUFFICIENT_POINT.getMessage());
 
         verify(mockUserPointTable, times(1)).selectById(userId);
         verify(mockUserPointTable, never()).insertOrUpdate(anyLong(), anyLong());
@@ -134,23 +166,26 @@ public class PointUnitTest {
     @Test
     void 포인트_사용_성공() {
         // given
-        long initialAmount = 10000L;
-        long amount = 5000L;
+        long initialAmount = 90000L;
+        long amountToUse = 5000L;
 
-        long totalAmount = initialAmount - amount;
+        long totalAmount = initialAmount - amountToUse;
 
         UserPoint currentUserPoint = new UserPoint(userId, initialAmount, System.currentTimeMillis());
-        UserPoint usePoint = new UserPoint(userId, totalAmount, System.currentTimeMillis());
+        UserPoint expectedUserPoint = new UserPoint(userId, totalAmount, System.currentTimeMillis());
+
 
         when(mockUserPointTable.selectById(userId)).thenReturn(currentUserPoint);
-        when(mockUserPointTable.insertOrUpdate(userId, amount)).thenReturn(usePoint);
+        when(mockUserPointTable.insertOrUpdate(userId, totalAmount)).thenReturn(expectedUserPoint);
+
         // when
+        UserPoint userPoint = pointService.use(userId, amountToUse);
 
         // then
-        assertThat(pointService.use(userId, amount).point()).isEqualTo(initialAmount - amount);
+        assertThat(userPoint.point()).isEqualTo(totalAmount);
 
         verify(mockUserPointTable, times(1)).selectById(userId);
-        verify(mockPointHistoryTable, times(1)).insert(eq(userId), eq(amount), eq(TransactionType.USE), anyLong());
+        verify(mockPointHistoryTable, times(1)).insert(eq(userId), eq(amountToUse), eq(TransactionType.USE), anyLong());
     }
 
 
@@ -167,9 +202,54 @@ public class PointUnitTest {
         // when & then
         assertThatThrownBy(() -> pointService.use(userId, pointToUse))
                 .isInstanceOf(InvalidRequestException.class)
-                .hasMessageContaining("포인트가 부족합니다.");
+                .hasMessageContaining(ErrorCode.INSUFFICIENT_POINT.getMessage());
 
         verify(mockUserPointTable, times(1)).selectById(userId);
+        verify(mockUserPointTable, never()).insertOrUpdate(anyLong(), anyLong());
+        verify(mockPointHistoryTable, never()).insert(anyLong(), anyLong(), any(TransactionType.class), anyLong());
+    }
+
+    @Test
+    void 포인트_사용_최소_금액_미만일때_예외_발생() {
+        //given
+        long pointToUse = 4999L;
+
+        //then
+        assertThatThrownBy(() -> pointService.use(userId, pointToUse))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining(ErrorCode.USE_AMOUNT_TOO_LOW.getMessage());
+
+        verify(mockUserPointTable, never()).selectById(userId);
+        verify(mockUserPointTable, never()).insertOrUpdate(anyLong(), anyLong());
+        verify(mockPointHistoryTable, never()).insert(anyLong(), anyLong(), any(TransactionType.class), anyLong());
+    }
+
+    @Test
+    void 포인트_사용_시_음수_금액_입력시_예외_발생() {
+        //given
+        long pointToUse = -2000L;
+
+        //then
+        assertThatThrownBy(() -> pointService.use(userId, pointToUse))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining(ErrorCode.NEGATIVE_USE_AMOUNT_NOT_ALLOWED.getMessage());
+
+        verify(mockUserPointTable, never()).selectById(userId);
+        verify(mockUserPointTable, never()).insertOrUpdate(anyLong(), anyLong());
+        verify(mockPointHistoryTable, never()).insert(anyLong(), anyLong(), any(TransactionType.class), anyLong());
+    }
+
+    @Test
+    void 포인트_사용_시_0원_입력시_예외_발생() {
+        //given
+        long pointToUse = 0;
+
+        //then
+        assertThatThrownBy(() -> pointService.use(userId, pointToUse))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining(ErrorCode.ZERO_USE_AMOUNT_NOT_ALLOWED.getMessage());
+
+        verify(mockUserPointTable, never()).selectById(userId);
         verify(mockUserPointTable, never()).insertOrUpdate(anyLong(), anyLong());
         verify(mockPointHistoryTable, never()).insert(anyLong(), anyLong(), any(TransactionType.class), anyLong());
     }
@@ -179,6 +259,7 @@ public class PointUnitTest {
     void 존재하는_사용자_포인트_조회() {
         // given
         long initialAmount = 10000L;
+
         UserPoint currentUserPoint = new UserPoint(userId, initialAmount, System.currentTimeMillis());
         when(mockUserPointTable.selectById(userId)).thenReturn(currentUserPoint);
 
@@ -203,5 +284,36 @@ public class PointUnitTest {
         verify(mockPointHistoryTable, times(1)).selectAllByUserId(userId);
     }
 
+    @Test
+    void 포인트_내역_조회시_여러_기록_정상_반환() {
+        //given
+        long amount = 100000L;
+        long useAmount = 65000L;
+
+        PointHistory userPoint1 = new PointHistory(1L, userId, amount,TransactionType.CHARGE, System.currentTimeMillis());
+        PointHistory userPoint2 = new PointHistory(2L, userId, amount,TransactionType.CHARGE, System.currentTimeMillis());
+        PointHistory userPoint3 = new PointHistory(3L, userId, useAmount,TransactionType.USE, System.currentTimeMillis());
+
+        List<PointHistory> pointHistories = new ArrayList<>();
+
+        pointHistories.add(userPoint1);
+        pointHistories.add(userPoint2);
+        pointHistories.add(userPoint3);
+
+        when(mockPointHistoryTable.selectAllByUserId(userId)).thenReturn(pointHistories);
+
+        // when
+        List<PointHistory> actualHistories = pointService.getHistory(userId);
+
+        //then
+        assertThat(actualHistories).isNotNull();
+        assertThat(actualHistories.size()).isEqualTo(3);
+        assertThat(actualHistories).isEqualTo(pointHistories);
+        assertThat(actualHistories.get(0).amount()).isEqualTo(amount);
+        assertThat(actualHistories.get(2).type()).isEqualTo(TransactionType.USE);
+
+        verify(mockPointHistoryTable, times(1)).selectAllByUserId(userId);
+
+    }
 
 }

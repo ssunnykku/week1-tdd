@@ -31,7 +31,6 @@ public class PointService {
         if (amount < 10000) {
             throw new InvalidRequestException(ErrorCode.CHARGE_AMOUNT_TOO_LOW);
         }
-
         if (amount % 1000 != 0) {
             throw new InvalidRequestException(ErrorCode.NOT_UNIT_OF_TEN_THOUSAND);
         }
@@ -39,7 +38,7 @@ public class PointService {
         UserPoint currentPoint = userPointTable.selectById(userId);
         UserPoint chargedPoint = currentPoint.addPoint(amount);
 
-        long totalPoint = currentPoint.point() + chargedPoint.point();
+        long totalPoint = chargedPoint.point();
 
         if (totalPoint > 10000000) {
             throw new InvalidRequestException(ErrorCode.EXCEED_AMOUNT);
@@ -47,7 +46,7 @@ public class PointService {
 
         pointHistoryTable.insert(userId, amount, TransactionType.CHARGE, System.currentTimeMillis());
 
-        return userPointTable.insertOrUpdate(userId, chargedPoint.point());
+        return userPointTable.insertOrUpdate(userId, totalPoint);
     }
 
     // 포인트 내역 조회
@@ -58,6 +57,12 @@ public class PointService {
     // 포인트 사용
     public UserPoint use(long userId, long amount) {
 
+        if (amount < 0) {
+            throw new InvalidRequestException(ErrorCode.NEGATIVE_USE_AMOUNT_NOT_ALLOWED);
+        }
+        if (amount == 0) {
+            throw new InvalidRequestException(ErrorCode.ZERO_USE_AMOUNT_NOT_ALLOWED);
+        }
         if (amount < 5000) {
             throw new InvalidRequestException(ErrorCode.USE_AMOUNT_TOO_LOW);
         }
