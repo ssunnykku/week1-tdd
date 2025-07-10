@@ -122,7 +122,26 @@ class PointServiceTest {
         assertThat(point.id()).isEqualTo(userId);
     }
 
-    // 충전 후 사용 흐름	한 테스트에서 충전 → 사용 → 잔액/히스토리 확인 (end-to-end flow)
+    @Test
+    void 충전_후_사용_및_잔액_확인 () {
+        // given
+        long amount = 20000L;
+        long pointToUse = 10000L;
 
+        // when
+        pointService.charge(userId, amount);
+        UserPoint resultPoint = pointService.use(userId, pointToUse);
+        UserPoint point = pointService.getPoint(userId);
+        List<PointHistory> histories = pointService.getHistory(userId);
+
+        // then
+        assertThat(point.point()).isEqualTo(amount - pointToUse);
+        assertThat(histories).hasSize(2);
+        assertThat(histories.get(0).amount()).isEqualTo(amount);
+        assertThat(histories.get(0).type()).isEqualTo(TransactionType.CHARGE);
+        assertThat(histories.get(1).amount()).isEqualTo(pointToUse);
+        assertThat(histories.get(1).type()).isEqualTo(TransactionType.USE);
+
+    }
 
 }
