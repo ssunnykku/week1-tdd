@@ -1,5 +1,6 @@
 package io.hhplus.tdd.point;
 
+import io.hhplus.tdd.exception.ErrorCode;
 import io.hhplus.tdd.exception.InvalidRequestException;
 import io.hhplus.tdd.point.domain.PointHistory;
 import io.hhplus.tdd.point.domain.TransactionType;
@@ -32,15 +33,17 @@ class PointServiceTest {
         long amount = 5000L;
 
         assertThatThrownBy(() -> pointService.charge(userId, amount))
-                .isInstanceOf(InvalidRequestException.class);
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining(ErrorCode.CHARGE_AMOUNT_TOO_LOW.getMessage());
     }
 
     @Test
     void 천원_단위로_충전하지_않으면_예외_발생() {
-        long amount = 5500L;
+        long amount = 55500L;
 
         assertThatThrownBy(() -> pointService.charge(userId, amount))
-                .isInstanceOf(InvalidRequestException.class);
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining(ErrorCode.NOT_UNIT_OF_THOUSAND.getMessage());
     }
 
 
@@ -58,15 +61,17 @@ class PointServiceTest {
 
     @Test
     void 특정_유저의_포인트_사용() {
-        long amount = 200000L;
+        long initialAmount = 200000L;
         long pointToUse = 50000L;
-        pointService.charge(userId, amount);
+        pointService.charge(userId, initialAmount);
 
+        UserPoint resultPoint = pointService.use(userId, pointToUse);
         List<PointHistory> histories = pointService.getHistory(userId);
 
-        UserPoint point = pointService.use(userId, pointToUse);
-
-        assertThat(point.point()).isEqualTo(amount - pointToUse);
+        assertThat(resultPoint.point()).isEqualTo(initialAmount - pointToUse);
+        assertThat(histories).hasSize(2);
+        assertThat(histories.get(1).amount()).isEqualTo(pointToUse);
+        assertThat(histories.get(1).type()).isEqualTo(TransactionType.USE);
     }
 
     @Test
@@ -76,7 +81,8 @@ class PointServiceTest {
         List<PointHistory> histories = pointService.getHistory(userId);
 
         assertThatThrownBy(() -> pointService.use(userId, pointToUse))
-                .isInstanceOf(InvalidRequestException.class);
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining(ErrorCode.INSUFFICIENT_POINT.getMessage());
     }
 
     @Test
@@ -84,7 +90,8 @@ class PointServiceTest {
         long amount = 4000L;
 
         assertThatThrownBy(() -> pointService.use(userId, amount))
-                .isInstanceOf(InvalidRequestException.class);
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining(ErrorCode.USE_AMOUNT_TOO_LOW.getMessage());
     }
 
 
@@ -98,6 +105,7 @@ class PointServiceTest {
 
         // then
         assertThat(point.point()).isEqualTo(amount);
+        assertThat(point.id()).isEqualTo(userId);
     }
 
     @Test
@@ -111,7 +119,10 @@ class PointServiceTest {
 
         // then
         assertThat(point.point()).isEqualTo(amount);
+        assertThat(point.id()).isEqualTo(userId);
     }
+
+    // 충전 후 사용 흐름	한 테스트에서 충전 → 사용 → 잔액/히스토리 확인 (end-to-end flow)
 
 
 }

@@ -32,7 +32,7 @@ public class PointService {
             throw new InvalidRequestException(ErrorCode.CHARGE_AMOUNT_TOO_LOW);
         }
         if (amount % 1000 != 0) {
-            throw new InvalidRequestException(ErrorCode.NOT_UNIT_OF_TEN_THOUSAND);
+            throw new InvalidRequestException(ErrorCode.NOT_UNIT_OF_THOUSAND);
         }
 
         UserPoint currentPoint = userPointTable.selectById(userId);

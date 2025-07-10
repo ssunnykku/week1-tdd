@@ -120,7 +120,7 @@ public class PointUnitTest {
 
         assertThatThrownBy(() -> pointService.charge(userId, chargeAmount))
                 .isInstanceOf(InvalidRequestException.class)
-                .hasMessageContaining(ErrorCode.NOT_UNIT_OF_TEN_THOUSAND.getMessage());
+                .hasMessageContaining(ErrorCode.NOT_UNIT_OF_THOUSAND.getMessage());
 
         verify(mockUserPointTable, never()).selectById(userId);
         verify(mockUserPointTable, never()).insertOrUpdate(anyLong(), anyLong());
