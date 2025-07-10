@@ -254,6 +254,23 @@ public class PointUnitTest {
         verify(mockPointHistoryTable, never()).insert(anyLong(), anyLong(), any(TransactionType.class), anyLong());
     }
 
+    @Test
+    void 잔액이_부족할_경우_포인트_사용_실패() {
+        // given
+        long initialAmount = 10000L;
+        long pointToUse = 20000L;
+
+        UserPoint currentUserPoint = new UserPoint(userId, initialAmount, System.currentTimeMillis());
+
+        when(mockUserPointTable.selectById(userId)).thenReturn(currentUserPoint);
+
+        // when & then
+        assertThatThrownBy(() -> pointService.use(userId, pointToUse))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining(ErrorCode.INSUFFICIENT_POINT.getMessage());
+
+    }
+
     // 포인트 조회
     @Test
     void 존재하는_사용자_포인트_조회() {
